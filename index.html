@@ -77,8 +77,8 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Smaller map
-const GRID_SIZE = 60;  // reduced for faster games
+// Smaller map for faster games
+const GRID_SIZE = 60;
 const CELL = canvas.width / GRID_SIZE;
 const BALL_RADIUS = 5;
 const BITE_RADIUS = 3;
@@ -157,8 +157,28 @@ function update() {
     if (gx>=0 && gx<GRID_SIZE && gy>=0 && gy<GRID_SIZE) {
       if (grid[gy][gx] !== b.side) {
         carve(gx, gy, b.side);
-        b.vx *= -1;
-        b.vy *= -1;
+
+        // Look at neighbors to decide bounce angle
+        let left   = gx > 0 ? grid[gy][gx-1] : b.side;
+        let right  = gx < GRID_SIZE-1 ? grid[gy][gx+1] : b.side;
+        let up     = gy > 0 ? grid[gy-1][gx] : b.side;
+        let down   = gy < GRID_SIZE-1 ? grid[gy+1][gx] : b.side;
+
+        let flipX = false, flipY = false;
+
+        if (left === b.side && right !== b.side) flipX = true;
+        else if (right === b.side && left !== b.side) flipX = true;
+
+        if (up === b.side && down !== b.side) flipY = true;
+        else if (down === b.side && up !== b.side) flipY = true;
+
+        // Corner or fallback → flip both
+        if (!flipX && !flipY) { flipX = true; flipY = true; }
+
+        if (flipX) b.vx *= -1;
+        if (flipY) b.vy *= -1;
+
+        // Push ball slightly out so it doesn’t get stuck
         b.x += b.vx;
         b.y += b.vy;
       }
