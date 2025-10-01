@@ -2,220 +2,508 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ball Basher</title>
+    <title>Ball Basher — VINE Bets</title>
     <meta name="theme-color" content="#172B36" />
     <style>
-      html {
-        height: 100%;
+      :root{
+        --bg1:#172B36; --bg2:#D9E8E3; --ink:#114C5A; --ink2:#172B36;
+        --accent:#FFC801; --accent2:#FF9932;
       }
-
-      body {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: linear-gradient(to bottom, #172b36 0%, #d9e8e3 100%);
+      html,body{height:100%;margin:0}
+      body{
+        display:flex;justify-content:center;align-items:center;min-height:100%;
+        background:linear-gradient(to bottom, var(--bg1) 0%, var(--bg2) 100%);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        color: var(--ink2);
       }
-
-      #container {
-        display: flex;
-        align-items: center;
-        flex-direction: column;
-        width: min(70vh, 80%);
-        max-width: 600px;
-        height: 100%;
+      #container{
+        display:flex; flex-direction:column; align-items:stretch;
+        width:min(70vh, 90%); max-width: 700px; gap:12px; padding:12px;
       }
-
-      canvas {
-        display: block;
-        border-radius: 4px;
-        overflow: hidden;
-        width: 100%;
-        margin-top: auto;
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+      .card{
+        background:#fff; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.12);
+        padding:12px;
       }
-
-      #summary {
-        font-family: monospace;
-        margin-top: 20px;
-        font-size: 18px;
-        font-weight: bold;
-        color: #114c5a;
-        text-align: center;
+      .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+      button,.btn{
+        cursor:pointer; background:var(--ink); color:#fff; border:0; border-radius:8px;
+        padding:8px 12px; font-weight:600;
       }
-
-      #score {
-        font-family: monospace;
-        margin-top: 10px;
-        font-size: 16px;
-        padding-left: 20px;
-        color: #172b36;
+      button[disabled]{opacity:.5; cursor:not-allowed;}
+      input[type="number"]{width:90px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px;}
+      label{font-size:14px}
+      .pill{padding:4px 8px; border-radius:999px; background:#eef2f7; font-size:12px}
+      #summary{ font-weight:800; color:var(--ink); text-align:center; }
+      #score{ font-family:monospace; color:var(--ink2); text-align:center; }
+      #timer{ font-variant-numeric: tabular-nums; }
+      canvas{
+        display:block; border-radius:10px; overflow:hidden; width:100%;
+        margin-top:2px; box-shadow:0 0 20px rgba(0,0,0,.20); background:#0000;
       }
+      table{width:100%; border-collapse:collapse; font-size:14px}
+      th,td{padding:6px 8px; border-bottom:1px solid #eef2f7; text-align:left}
+      th{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#556}
+      .right{text-align:right}
+      .winner{color:#0a7e42; font-weight:800}
+      .danger{color:#b91c1c; font-weight:700}
+      .muted{color:#6b7280}
+      .tiny{font-size:12px}
+      .sep{height:1px;background:#eef2f7;margin:6px 0}
     </style>
+    <!-- Ethers (optional for on-chain). Safe to keep even in demo mode. -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   </head>
-
   <body>
     <div id="container">
-      <div id="summary"></div>
-      <div id="score"></div>
+      <!-- Top summary -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div id="summary">—</div>
+          <div class="row">
+            <span class="pill">Target: 70%</span>
+            <span class="pill">Cut-off: <span id="timer">00:45</span></span>
+          </div>
+        </div>
+        <div id="score" class="tiny muted">day 50.0% | night 50.0%</div>
+      </div>
+
+      <!-- Betting controls -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div class="row">
+            <button id="btn-connect">Connect Wallet</button>
+            <span id="addr" class="pill muted">Not connected</span>
+          </div>
+          <div class="row">
+            <button id="btn-start" class="btn">Start Round</button>
+            <button id="btn-reset" class="btn" style="background:#475569">Reset</button>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <div class="row">
+          <label><input type="radio" name="side" value="day" checked> Day</label>
+          <label><input type="radio" name="side" value="night"> Night</label>
+          <input id="bet-amt" type="number" min="0.1" step="0.1" max="10" value="1" />
+          <span class="pill">Max 10 VINE</span>
+          <button id="btn-place">Place Bet</button>
+        </div>
+        <div class="tiny muted" id="bet-msg" style="margin-top:6px">Bets are open until the round starts.</div>
+      </div>
+
+      <!-- Game canvas -->
       <canvas id="pongCanvas" width="600" height="600"></canvas>
+
+      <!-- Payouts / Bets table -->
+      <div id="ledger" class="card" style="display:none">
+        <div class="row" style="justify-content:space-between">
+          <strong>Round Result: <span id="result-label">—</span></strong>
+          <span class="tiny muted">Demo settlement (off-chain)</span>
+        </div>
+        <div class="sep"></div>
+        <table id="bet-table">
+          <thead><tr><th>Address</th><th>Side</th><th class="right">Stake (VINE)</th><th class="right">Payout (VINE)</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th>Total</th><th id="pool-side">—</th><th class="right" id="pool-stake">0</th><th class="right" id="pool-payout">0</th></tr></tfoot>
+        </table>
+      </div>
     </div>
-  </body>
 
-  <script>
-    const colorPalette = {
-      ArcticPowder: "#F1F6F4",
-      MysticMint: "#D9E8E3",
-      Forsythia: "#FFC801",
-      DeepSaffron: "#FF9932",
-      NocturnalExpedition: "#114C5A",
-      OceanicNoir: "#172B36",
-    };
+    <script>
+      /************** CONFIG (update for real chain) **************/
+      const CHAIN_ID_HEX = "0x1"; // e.g., Ethereum mainnet "0x1" or your custom chain id (hex)
+      const VINE_TOKEN_ADDRESS = "0xYourVineErc20TokenAddress"; // <-- replace for real
+      const BETTING_CONTRACT_ADDRESS = "0xYourBettingContract";  // <-- replace for real
 
-    const canvas = document.getElementById("pongCanvas");
-    const ctx = canvas.getContext("2d");
-    const scoreElement = document.getElementById("score");
-    const summaryElement = document.getElementById("summary");
+      // Minimal ERC-20 ABI for approve/balance (add more if needed)
+      const ERC20_ABI = [
+        "function decimals() view returns (uint8)",
+        "function balanceOf(address) view returns (uint256)",
+        "function allowance(address owner, address spender) view returns (uint256)",
+        "function approve(address spender, uint256 value) returns (bool)"
+      ];
 
-    const DAY_COLOR = colorPalette.MysticMint;
-    const DAY_BALL_COLOR = colorPalette.NocturnalExpedition;
-    const NIGHT_COLOR = colorPalette.NocturnalExpedition;
-    const NIGHT_BALL_COLOR = colorPalette.MysticMint;
-    const SQUARE_SIZE = 25;
-    const MIN_SPEED = 5;
-    const MAX_SPEED = 10;
+      // Example Betting ABI (you must align with your actual contract)
+      // function placeBet(uint8 side, uint256 amount)  // side: 0=Day, 1=Night; amount in wei-like units
+      // function settleRound(uint8 winnerSide)
+      // These are placeholders for illustration.
+      const BETTING_ABI = [
+        "function placeBet(uint8 side, uint256 amount) payable",
+        "function settleRound(uint8 winnerSide)"
+      ];
 
-    const numSquaresX = canvas.width / SQUARE_SIZE;
-    const numSquaresY = canvas.height / SQUARE_SIZE;
-    const totalSquares = numSquaresX * numSquaresY;
+      let provider = null, signer = null, userAddress = null;
 
-    let dayScore = 0;
-    let nightScore = 0;
-
-    const squares = [];
-
-    // Populate the fields, one half day, one half night
-    for (let i = 0; i < numSquaresX; i++) {
-      squares[i] = [];
-      for (let j = 0; j < numSquaresY; j++) {
-        squares[i][j] = i < numSquaresX / 2 ? DAY_COLOR : NIGHT_COLOR;
-      }
-    }
-
-    const balls = [
-      {
-        x: canvas.width / 4,
-        y: canvas.height / 2,
-        dx: 8 * 0.9,
-        dy: -8 * 0.9,
-        reverseColor: DAY_COLOR,
-        ballColor: DAY_BALL_COLOR,
-      },
-      {
-        x: (canvas.width / 4) * 3,
-        y: canvas.height / 2,
-        dx: -8 * 0.9,
-        dy: 8 * 0.9,
-        reverseColor: NIGHT_COLOR,
-        ballColor: NIGHT_BALL_COLOR,
-      },
-    ];
-
-    function drawBall(ball) {
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, SQUARE_SIZE / 2, 0, Math.PI * 2, false);
-      ctx.fillStyle = ball.ballColor;
-      ctx.fill();
-      ctx.closePath();
-    }
-
-    function drawSquares() {
-      dayScore = 0;
-      nightScore = 0;
-
-      for (let i = 0; i < numSquaresX; i++) {
-        for (let j = 0; j < numSquaresY; j++) {
-          ctx.fillStyle = squares[i][j];
-          ctx.fillRect(i * SQUARE_SIZE, j * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
-
-          if (squares[i][j] === DAY_COLOR) dayScore++;
-          if (squares[i][j] === NIGHT_COLOR) nightScore++;
+      async function connectWallet() {
+        if (!window.ethereum) {
+          setMsg("bet-msg","No wallet found. Install MetaMask.", true);
+          return;
+        }
+        try {
+          const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          signer = provider.getSigner();
+          userAddress = (await signer.getAddress());
+          // Optional chain check
+          const net = await provider.getNetwork();
+          const want = parseInt(CHAIN_ID_HEX,16);
+          if (net.chainId !== want) {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_ID_HEX }] });
+          }
+          document.getElementById("addr").textContent = short(userAddress);
+          setMsg("bet-msg","Wallet connected. You can place a bet (demo or on-chain).");
+        } catch (e) {
+          setMsg("bet-msg","Wallet connection rejected.", true);
         }
       }
-    }
 
-    function checkSquareCollision(ball) {
-      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
-        const checkX = ball.x + Math.cos(angle) * (SQUARE_SIZE / 2);
-        const checkY = ball.y + Math.sin(angle) * (SQUARE_SIZE / 2);
+      function short(addr){ return addr ? addr.slice(0,6)+"…"+addr.slice(-4) : "—"; }
+      function setMsg(id, text, danger=false){
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.className = "tiny " + (danger ? "danger" : "muted");
+      }
 
-        const i = Math.floor(checkX / SQUARE_SIZE);
-        const j = Math.floor(checkY / SQUARE_SIZE);
+      /************** GAME **************/
+      const colorPalette = {
+        ArcticPowder: "#F1F6F4",
+        MysticMint: "#D9E8E3",
+        Forsythia: "#FFC801",
+        DeepSaffron: "#FF9932",
+        NocturnalExpedition: "#114C5A",
+        OceanicNoir: "#172B36",
+      };
 
-        if (i >= 0 && i < numSquaresX && j >= 0 && j < numSquaresY) {
-          if (squares[i][j] !== ball.reverseColor) {
-            squares[i][j] = ball.reverseColor;
-            if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
-              ball.dx = -ball.dx;
-            } else {
-              ball.dy = -ball.dy;
+      const canvas = document.getElementById("pongCanvas");
+      const ctx = canvas.getContext("2d");
+      const scoreElement = document.getElementById("score");
+      const summaryElement = document.getElementById("summary");
+      const timerEl = document.getElementById("timer");
+
+      const DAY_COLOR = colorPalette.MysticMint;
+      const DAY_BALL_COLOR = colorPalette.OceanicNoir;
+      const NIGHT_COLOR = colorPalette.OceanicNoir;
+      const NIGHT_BALL_COLOR = colorPalette.MysticMint;
+      const SQUARE_SIZE = 25;
+      const MIN_SPEED = 5;
+      const MAX_SPEED = 10;
+
+      const numSquaresX = canvas.width / SQUARE_SIZE;
+      const numSquaresY = canvas.height / SQUARE_SIZE;
+      const totalSquares = numSquaresX * numSquaresY;
+
+      let squares = [];
+      let balls = [];
+      let dayScore = 0, nightScore = 0;
+
+      let frameTimer = null;
+      const FRAME_RATE = 100; // fps
+      const CUT_PCT = 70.0;
+      const CUT_TIME_MS = 45_000;
+      let roundActive = false;
+      let roundStart = 0;
+
+      function initField(){
+        squares = [];
+        for (let i = 0; i < numSquaresX; i++) {
+          squares[i] = [];
+          for (let j = 0; j < numSquaresY; j++) {
+            squares[i][j] = i < numSquaresX / 2 ? DAY_COLOR : NIGHT_COLOR;
+          }
+        }
+        balls = [
+          { x: canvas.width/4,     y: canvas.height/2, dx: 8*0.9,  dy: -8*0.9, reverseColor: DAY_COLOR,   ballColor: DAY_BALL_COLOR },
+          { x: (canvas.width/4)*3, y: canvas.height/2, dx: -8*0.9, dy:  8*0.9, reverseColor: NIGHT_COLOR, ballColor: NIGHT_BALL_COLOR }
+        ];
+      }
+
+      function drawBall(ball) {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, SQUARE_SIZE / 2, 0, Math.PI * 2, false);
+        ctx.fillStyle = ball.ballColor;
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      function drawSquares() {
+        dayScore = 0; nightScore = 0;
+        for (let i = 0; i < numSquaresX; i++) {
+          for (let j = 0; j < numSquaresY; j++) {
+            ctx.fillStyle = squares[i][j];
+            ctx.fillRect(i * SQUARE_SIZE, j * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+            if (squares[i][j] === DAY_COLOR) dayScore++;
+            if (squares[i][j] === NIGHT_COLOR) nightScore++;
+          }
+        }
+      }
+
+      function checkSquareCollision(ball) {
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+          const checkX = ball.x + Math.cos(angle) * (SQUARE_SIZE / 2);
+          const checkY = ball.y + Math.sin(angle) * (SQUARE_SIZE / 2);
+          const i = Math.floor(checkX / SQUARE_SIZE);
+          const j = Math.floor(checkY / SQUARE_SIZE);
+          if (i >= 0 && i < numSquaresX && j >= 0 && j < numSquaresY) {
+            if (squares[i][j] !== ball.reverseColor) {
+              squares[i][j] = ball.reverseColor;
+              if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) { ball.dx = -ball.dx; }
+              else { ball.dy = -ball.dy; }
             }
           }
         }
       }
-    }
 
-    function checkBoundaryCollision(ball) {
-      if (ball.x + ball.dx > canvas.width - SQUARE_SIZE / 2 || ball.x + ball.dx < SQUARE_SIZE / 2) {
-        ball.dx = -ball.dx;
-      }
-      if (ball.y + ball.dy > canvas.height - SQUARE_SIZE / 2 || ball.y + ball.dy < SQUARE_SIZE / 2) {
-        ball.dy = -ball.dy;
-      }
-    }
-
-    function addRandomness(ball) {
-      ball.dx += Math.random() * 0.02 - 0.01;
-      ball.dy += Math.random() * 0.02 - 0.01;
-
-      ball.dx = Math.min(Math.max(ball.dx, -MAX_SPEED), MAX_SPEED);
-      ball.dy = Math.min(Math.max(ball.dy, -MAX_SPEED), MAX_SPEED);
-
-      if (Math.abs(ball.dx) < MIN_SPEED) ball.dx = ball.dx > 0 ? MIN_SPEED : -MIN_SPEED;
-      if (Math.abs(ball.dy) < MIN_SPEED) ball.dy = ball.dy > 0 ? MIN_SPEED : -MIN_SPEED;
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawSquares();
-
-      const dayPercent = ((dayScore / totalSquares) * 100).toFixed(1);
-      const nightPercent = ((nightScore / totalSquares) * 100).toFixed(1);
-      scoreElement.textContent = `day ${dayPercent}% | night ${nightPercent}%`;
-
-      // Summary text
-      let diff = Math.abs(dayPercent - nightPercent).toFixed(1);
-      if (dayPercent > nightPercent) {
-        summaryElement.textContent = `Day winning by ${diff}%`;
-      } else if (nightPercent > dayPercent) {
-        summaryElement.textContent = `Night winning by ${diff}%`;
-      } else {
-        summaryElement.textContent = "It's a tie!";
+      function checkBoundaryCollision(ball) {
+        if (ball.x + ball.dx > canvas.width - SQUARE_SIZE / 2 || ball.x + ball.dx < SQUARE_SIZE / 2) {
+          ball.dx = -ball.dx;
+        }
+        if (ball.y + ball.dy > canvas.height - SQUARE_SIZE / 2 || ball.y + ball.dy < SQUARE_SIZE / 2) {
+          ball.dy = -ball.dy;
+        }
       }
 
-      balls.forEach((ball) => {
-        drawBall(ball);
-        checkSquareCollision(ball);
-        checkBoundaryCollision(ball);
-        ball.x += ball.dx;
-        ball.y += ball.dy;
-        addRandomness(ball);
+      function addRandomness(ball) {
+        ball.dx += Math.random() * 0.02 - 0.01;
+        ball.dy += Math.random() * 0.02 - 0.01;
+        ball.dx = Math.min(Math.max(ball.dx, -MAX_SPEED), MAX_SPEED);
+        ball.dy = Math.min(Math.max(ball.dy, -MAX_SPEED), MAX_SPEED);
+        if (Math.abs(ball.dx) < MIN_SPEED) ball.dx = ball.dx > 0 ? MIN_SPEED : -MIN_SPEED;
+        if (Math.abs(ball.dy) < MIN_SPEED) ball.dy = ball.dy > 0 ? MIN_SPEED : -MIN_SPEED;
+      }
+
+      function updateHUD() {
+        const dayPercent = ((dayScore / totalSquares) * 100);
+        const nightPercent = ((nightScore / totalSquares) * 100);
+        scoreElement.textContent = `day ${dayPercent.toFixed(1)}% | night ${nightPercent.toFixed(1)}%`;
+
+        const diff = Math.abs(dayPercent - nightPercent).toFixed(1);
+        if (dayPercent > nightPercent) summaryElement.textContent = `Day winning by ${diff}%`;
+        else if (nightPercent > dayPercent) summaryElement.textContent = `Night winning by ${diff}%`;
+        else summaryElement.textContent = "It's a tie!";
+
+        // timer
+        if (roundActive) {
+          const remain = Math.max(0, CUT_TIME_MS - (Date.now() - roundStart));
+          timerEl.textContent = fmtTime(remain);
+        } else {
+          timerEl.textContent = fmtTime(CUT_TIME_MS);
+        }
+      }
+
+      function fmtTime(ms){
+        const s = Math.ceil(ms/1000);
+        const m = Math.floor(s/60);
+        const r = s % 60;
+        return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawSquares();
+
+        balls.forEach((ball) => {
+          drawBall(ball);
+          checkSquareCollision(ball);
+          checkBoundaryCollision(ball);
+          ball.x += ball.dx;
+          ball.y += ball.dy;
+          addRandomness(ball);
+        });
+
+        updateHUD();
+
+        // Win conditions
+        const dayPct = (dayScore/totalSquares)*100;
+        const nightPct = (nightScore/totalSquares)*100;
+        const timeUp = (Date.now() - roundStart) >= CUT_TIME_MS;
+
+        if (dayPct >= CUT_PCT || nightPct >= CUT_PCT || timeUp) {
+          endRound(dayPct >= nightPct ? "day" : "night");
+        }
+      }
+
+      function startLoop(){
+        if (frameTimer) clearInterval(frameTimer);
+        frameTimer = setInterval(draw, 1000/FRAME_RATE);
+      }
+      function stopLoop(){
+        if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
+      }
+
+      /************** BET LOGIC (demo + optional on-chain) **************/
+      const MAX_BET = 10; // VINE
+
+      // In-memory bet book (demo mode)
+      const bets = []; // { addr, side: 'day'|'night', amt }
+      let bettingOpen = true;
+
+      function placeBetLocal(addr, side, amt){
+        bets.push({ addr, side, amt: Number(amt) });
+      }
+
+      async function placeBetOnChain(sideStr, amtVine){
+        if (!provider || !signer) throw new Error("Connect wallet first.");
+        // OPTIONAL: perform ERC20 approve then call placeBet
+        const vine = new ethers.Contract(VINE_TOKEN_ADDRESS, ERC20_ABI, signer);
+        const decimals = await vine.decimals();
+        const amount = ethers.utils.parseUnits(String(amtVine), decimals);
+
+        // 1) Approve if needed
+        const allowance = await vine.allowance(userAddress, BETTING_CONTRACT_ADDRESS);
+        if (allowance.lt(amount)) {
+          const txA = await vine.approve(BETTING_CONTRACT_ADDRESS, amount);
+          await txA.wait();
+        }
+        // 2) Place bet: side 0=day,1=night
+        const side = (sideStr === "day") ? 0 : 1;
+        const betCtr = new ethers.Contract(BETTING_CONTRACT_ADDRESS, BETTING_ABI, signer);
+        const txB = await betCtr.placeBet(side, amount);
+        await txB.wait();
+      }
+
+      function lockBets(){
+        bettingOpen = false;
+        document.getElementById("btn-place").disabled = true;
+        setMsg("bet-msg","Bets locked. Round in progress.");
+      }
+      function openBets(){
+        bettingOpen = true;
+        document.getElementById("btn-place").disabled = false;
+        setMsg("bet-msg","Bets are open until the round starts.");
+      }
+
+      function computePayouts(winner){
+        // pool
+        const pool = bets.reduce((acc,b)=> (acc + b.amt), 0);
+        const winTotal = bets.filter(b=>b.side===winner).reduce((acc,b)=>acc+b.amt,0);
+        const rows = [];
+        let totalPayout = 0;
+
+        if (winTotal === 0) {
+          // nobody bet on winner — in demo we keep pool at 0 payout
+          bets.forEach(b=>{
+            rows.push({ ...b, payout: 0 });
+          });
+        } else {
+          bets.forEach(b=>{
+            if (b.side === winner) {
+              const share = b.amt / winTotal;
+              const payout = parseFloat((pool * share).toFixed(4));
+              rows.push({ ...b, payout });
+              totalPayout += payout;
+            } else {
+              rows.push({ ...b, payout: 0 });
+            }
+          });
+        }
+        return { rows, pool, totalPayout: parseFloat(totalPayout.toFixed(4)) };
+      }
+
+      function renderLedger(winner){
+        const { rows, pool, totalPayout } = computePayouts(winner);
+        const tbody = document.querySelector("#bet-table tbody");
+        tbody.innerHTML = "";
+        rows.forEach(r=>{
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${short(r.addr)}</td>
+            <td>${r.side}</td>
+            <td class="right">${r.amt.toFixed(2)}</td>
+            <td class="right">${r.payout.toFixed(4)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        document.getElementById("pool-side").textContent = winner.toUpperCase();
+        document.getElementById("pool-stake").textContent = pool.toFixed(2);
+        document.getElementById("pool-payout").textContent = totalPayout.toFixed(4);
+        document.getElementById("result-label").innerHTML = `<span class="winner">${winner.toUpperCase()}</span>`;
+        document.getElementById("ledger").style.display = "block";
+      }
+
+      async function settleOnChain(winner){
+        if (!provider || !signer) return; // skip if demo
+        try{
+          const betCtr = new ethers.Contract(BETTING_CONTRACT_ADDRESS, BETTING_ABI, signer);
+          const side = (winner === "day") ? 0 : 1;
+          const tx = await betCtr.settleRound(side);
+          await tx.wait();
+        }catch(e){
+          console.warn("On-chain settle failed/skipped:", e.message);
+        }
+      }
+
+      /************** ROUND CONTROL **************/
+      function startRound(){
+        if (!bettingOpen) return;
+        // lock betting and start
+        lockBets();
+        roundActive = true;
+        roundStart = Date.now();
+        document.getElementById("ledger").style.display = "none";
+        initField();
+        startLoop();
+      }
+
+      function endRound(winner){
+        if (!roundActive) return;
+        roundActive = false;
+        stopLoop();
+        summaryElement.textContent = `${winner[0].toUpperCase()+winner.slice(1)} wins!`;
+        // Demo payouts
+        renderLedger(winner);
+        // Optional on-chain settle (no-op if not configured)
+        settleOnChain(winner);
+        // Re-open bets for the next round
+        openBets();
+      }
+
+      function resetAll(){
+        stopLoop();
+        roundActive = false;
+        openBets();
+        bets.length = 0;
+        document.querySelector("#bet-table tbody").innerHTML = "";
+        document.getElementById("ledger").style.display = "none";
+        initField();
+        updateHUD();
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        drawSquares();
+        updateHUD();
+      }
+
+      /************** UI HANDLERS **************/
+      document.getElementById("btn-connect").addEventListener("click", connectWallet);
+
+      document.getElementById("btn-place").addEventListener("click", async ()=>{
+        if (!bettingOpen) { setMsg("bet-msg","Bets are locked for this round.", true); return; }
+        const side = (document.querySelector('input[name="side"]:checked')?.value) || "day";
+        const amt = parseFloat(document.getElementById("bet-amt").value || "0");
+        if (!(amt > 0)) { setMsg("bet-msg","Enter a bet amount.", true); return; }
+        if (amt > MAX_BET) { setMsg("bet-msg",`Max bet is ${MAX_BET} VINE.`, true); return; }
+
+        const addr = userAddress || "0xDEMO_"+Math.random().toString(16).slice(2,8);
+        // Always record in local demo book so the table shows entries
+        placeBetLocal(addr, side, amt);
+
+        // Try on-chain if config is set (addresses not placeholders)
+        const onChainReady = VINE_TOKEN_ADDRESS.startsWith("0x") && BETTING_CONTRACT_ADDRESS.startsWith("0x") && CHAIN_ID_HEX.startsWith("0x") && window.ethereum;
+        if (onChainReady && userAddress) {
+          try{
+            await placeBetOnChain(side, amt);
+            setMsg("bet-msg",`Bet placed on-chain: ${amt} VINE on ${side.toUpperCase()}.`);
+          }catch(e){
+            console.warn(e);
+            setMsg("bet-msg","On-chain bet failed; recorded in demo book only.", true);
+          }
+        } else {
+          setMsg("bet-msg",`Demo bet placed: ${amt} VINE on ${side.toUpperCase()}. Connect & configure to go on-chain.`);
+        }
       });
-    }
 
-    const FRAME_RATE = 100;
-    setInterval(draw, 1000 / FRAME_RATE);
-  </script>
+      document.getElementById("btn-start").addEventListener("click", startRound);
+      document.getElementById("btn-reset").addEventListener("click", resetAll);
+
+      // Boot
+      resetAll();
+    </script>
+  </body>
 </html>
