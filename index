@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Territory Clash</title>
+  <style>
+    body {
+      margin: 0;
+      background: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      border: 2px solid #444;
+      background: #000;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: monospace;
+      font-size: 14px;
+      color: #eee;
+      text-align: center;
+    }
+    #controls {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    button {
+      margin: 0 5px;
+      padding: 5px 10px;
+      background: #444;
+      color: #eee;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">Day 0 | Light: 50% | Dark: 50%</div>
+  <canvas id="game" width="512" height="512"></canvas>
+  <div id="controls">
+    <button onclick="toggle()">Start / Pause</button>
+    <button onclick="resetGame()">Reset</button>
+  </div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const GRID_SIZE = 256;    // grid resolution
+const CELL = canvas.width / GRID_SIZE;
+const BALL_RADIUS = 4;
+const BITE_RADIUS = 3;
+
+let running = false;
+let frame = 0;
+
+// Grid: 0 = light, 1 = dark
+let grid = [];
+function initGrid() {
+  grid = [];
+  for (let y=0; y<GRID_SIZE; y++) {
+    let row = [];
+    for (let x=0; x<GRID_SIZE; x++) {
+      row.push(x < GRID_SIZE/2 ? 0 : 1);
+    }
+    grid.push(row);
+  }
+}
+
+// Balls
+let balls = [
+  {x: 80, y: 200, vx: 2, vy: 1.5, side: 0},
+  {x: 430, y: 300, vx: -2, vy: 1.2, side: 1}
+];
+
+// Reset function
+function resetGame() {
+  initGrid();
+  balls[0].x=80; balls[0].y=200; balls[0].vx=2; balls[0].vy=1.5; balls[0].side=0;
+  balls[1].x=430; balls[1].y=300; balls[1].vx=-2; balls[1].vy=1.2; balls[1].side=1;
+  running=false;
+  frame=0;
+  draw();
+}
+
+// Toggle running
+function toggle() {
+  running = !running;
+  if (running) requestAnimationFrame(loop);
+}
+
+// Game loop
+function loop() {
+  if (!running) return;
+  update();
+  draw();
+  frame++;
+  requestAnimationFrame(loop);
+}
+
+// Update logic
+function update() {
+  balls.forEach(b => {
+    b.x += b.vx;
+    b.y += b.vy;
+
+    // Bounce walls
+    if (b.x < BALL_RADIUS || b.x > canvas.width-BALL_RADIUS) b.vx *= -1;
+    if (b.y < BALL_RADIUS || b.y > canvas.height-BALL_RADIUS) b.vy *= -1;
+
+    // Territory carving
+    let gx = Math.floor(b.x / CELL);
+    let gy = Math.floor(b.y / CELL);
+    if (gx>=0 && gx<GRID_SIZE && gy>=0 && gy<GRID_SIZE) {
+      if (grid[gy][gx] !== b.side) {
+        carve(gx, gy, b.side);
+      }
+    }
+  });
+}
+
+// Carve territory
+function carve(cx, cy, side) {
+  for (let y=-BITE_RADIUS; y<=BITE_RADIUS; y++) {
+    for (let x=-BITE_RADIUS; x<=BITE_RADIUS; x++) {
+      let dx = cx+x, dy = cy+y;
+      if (dx>=0 && dx<GRID_SIZE && dy>=0 && dy<GRID_SIZE) {
+        if (x*x+y*y <= BITE_RADIUS*BITE_RADIUS) {
+          grid[dy][dx] = side;
+        }
+      }
+    }
+  }
+}
+
+// Render
+function draw() {
+  // Fill board from grid
+  for (let y=0; y<GRID_SIZE; y++) {
+    for (let x=0; x<GRID_SIZE; x++) {
+      ctx.fillStyle = grid[y][x]===0 ? "#d9e6e3" : "#163840";
+      ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
+    }
+  }
+  // Balls
+  balls.forEach(b => {
+    ctx.beginPath();
+    ctx.fillStyle = "#fff";
+    ctx.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // HUD update
+  let total=GRID_SIZE*GRID_SIZE;
+  let light=0, dark=0;
+  for (let y=0; y<GRID_SIZE; y++) {
+    for (let x=0; x<GRID_SIZE; x++) {
+      if (grid[y][x]===0) light++; else dark++;
+    }
+  }
+  let lightPct = ((light/total)*100).toFixed(1);
+  let darkPct = ((dark/total)*100).toFixed(1);
+  document.getElementById("hud").textContent =
+    "Day " + Math.floor(frame/60) +
+    " | Light: " + lightPct + "% | Dark: " + darkPct + "%";
+}
+
+// Start
+resetGame();
+</script>
+</body>
+</html>
