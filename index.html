@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pong wars</title>
+    <title>Ball Basher</title>
     <meta name="theme-color" content="#172B36" />
     <style>
       html {
@@ -37,9 +37,18 @@
         box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
       }
 
+      #summary {
+        font-family: monospace;
+        margin-top: 20px;
+        font-size: 18px;
+        font-weight: bold;
+        color: #114c5a;
+        text-align: center;
+      }
+
       #score {
         font-family: monospace;
-        margin-top: 30px;
+        margin-top: 10px;
         font-size: 16px;
         padding-left: 20px;
         color: #172b36;
@@ -49,8 +58,9 @@
 
   <body>
     <div id="container">
-      <canvas id="pongCanvas" width="600" height="600"></canvas>
+      <div id="summary"></div>
       <div id="score"></div>
+      <canvas id="pongCanvas" width="600" height="600"></canvas>
     </div>
   </body>
 
@@ -67,6 +77,7 @@
     const canvas = document.getElementById("pongCanvas");
     const ctx = canvas.getContext("2d");
     const scoreElement = document.getElementById("score");
+    const summaryElement = document.getElementById("summary");
 
     const DAY_COLOR = colorPalette.MysticMint;
     const DAY_BALL_COLOR = colorPalette.NocturnalExpedition;
@@ -97,7 +108,7 @@
       {
         x: canvas.width / 4,
         y: canvas.height / 2,
-        dx: 8 * 0.9,  // slowed down by 10%
+        dx: 8 * 0.9,
         dy: -8 * 0.9,
         reverseColor: DAY_COLOR,
         ballColor: DAY_BALL_COLOR,
@@ -111,8 +122,6 @@
         ballColor: NIGHT_BALL_COLOR,
       },
     ];
-
-    let iteration = 0;
 
     function drawBall(ball) {
       ctx.beginPath();
@@ -186,6 +195,16 @@
       const nightPercent = ((nightScore / totalSquares) * 100).toFixed(1);
       scoreElement.textContent = `day ${dayPercent}% | night ${nightPercent}%`;
 
+      // Summary text
+      let diff = Math.abs(dayPercent - nightPercent).toFixed(1);
+      if (dayPercent > nightPercent) {
+        summaryElement.textContent = `Day winning by ${diff}%`;
+      } else if (nightPercent > dayPercent) {
+        summaryElement.textContent = `Night winning by ${diff}%`;
+      } else {
+        summaryElement.textContent = "It's a tie!";
+      }
+
       balls.forEach((ball) => {
         drawBall(ball);
         checkSquareCollision(ball);
@@ -194,8 +213,6 @@
         ball.y += ball.dy;
         addRandomness(ball);
       });
-
-      iteration++;
     }
 
     const FRAME_RATE = 100;
