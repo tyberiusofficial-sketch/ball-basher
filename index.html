@@ -57,11 +57,11 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Smaller grid → bigger blocky map
-const GRID_SIZE = 100;   // was 256, reduced
+// Smaller map
+const GRID_SIZE = 100;
 const CELL = canvas.width / GRID_SIZE;
 const BALL_RADIUS = 5;
-const BITE_RADIUS = 4;
+const BITE_RADIUS = 3;
 
 let running = false;
 let frame = 0;
@@ -79,7 +79,7 @@ function initGrid() {
   }
 }
 
-// Balls (doubled speed)
+// Balls (double speed)
 let balls = [
   {x: 60, y: 150, vx: 4, vy: 3, side: 0},
   {x: 340, y: 250, vx: -4, vy: 2.4, side: 1}
@@ -120,27 +120,32 @@ function update() {
     if (b.x < BALL_RADIUS || b.x > canvas.width-BALL_RADIUS) b.vx *= -1;
     if (b.y < BALL_RADIUS || b.y > canvas.height-BALL_RADIUS) b.vy *= -1;
 
-    // Territory collision → chip away blocks
+    // Check if ball is inside enemy territory
     let gx = Math.floor(b.x / CELL);
     let gy = Math.floor(b.y / CELL);
     if (gx>=0 && gx<GRID_SIZE && gy>=0 && gy<GRID_SIZE) {
       if (grid[gy][gx] !== b.side) {
-        // Instead of converting to attacker’s side,
-        // carve into EMPTY (null), knocking blocks away
-        carve(gx, gy);
+        // Carve a bite
+        carve(gx, gy, b.side);
+        // Bounce back
+        b.vx *= -1;
+        b.vy *= -1;
+        // Push ball slightly back so it doesn’t stick
+        b.x += b.vx;
+        b.y += b.vy;
       }
     }
   });
 }
 
-// Carve territory → remove blocks (null = empty)
-function carve(cx, cy) {
+// Carve territory → replace with attacker’s color
+function carve(cx, cy, side) {
   for (let y=-BITE_RADIUS; y<=BITE_RADIUS; y++) {
     for (let x=-BITE_RADIUS; x<=BITE_RADIUS; x++) {
       let dx = cx+x, dy = cy+y;
       if (dx>=0 && dx<GRID_SIZE && dy>=0 && dy<GRID_SIZE) {
         if (x*x+y*y <= BITE_RADIUS*BITE_RADIUS) {
-          grid[dy][dx] = null; // knock block away
+          grid[dy][dx] = side;
         }
       }
     }
@@ -151,9 +156,7 @@ function carve(cx, cy) {
 function draw() {
   for (let y=0; y<GRID_SIZE; y++) {
     for (let x=0; x<GRID_SIZE; x++) {
-      if (grid[y][x] === 0) ctx.fillStyle = "#d9e6e3"; // light
-      else if (grid[y][x] === 1) ctx.fillStyle = "#163840"; // dark
-      else ctx.fillStyle = "#000"; // empty knocked-away
+      ctx.fillStyle = grid[y][x]===0 ? "#d9e6e3" : "#163840";
       ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
     }
   }
@@ -167,19 +170,18 @@ function draw() {
 
   // HUD update
   let total=GRID_SIZE*GRID_SIZE;
-  let light=0, dark=0, empty=0;
+  let light=0, dark=0;
   for (let y=0; y<GRID_SIZE; y++) {
     for (let x=0; x<GRID_SIZE; x++) {
       if (grid[y][x]===0) light++;
       else if (grid[y][x]===1) dark++;
-      else empty++;
     }
   }
   let lightPct = ((light/total)*100).toFixed(1);
   let darkPct = ((dark/total)*100).toFixed(1);
   document.getElementById("hud").textContent =
     "Day " + Math.floor(frame/60) +
-    " | Light: " + lightPct + "% | Dark: " + darkPct + "% | Empty: " + ((empty/total)*100).toFixed(1) + "%";
+    " | Light: " + lightPct + "% | Dark: " + darkPct + "%";
 }
 
 // Start
