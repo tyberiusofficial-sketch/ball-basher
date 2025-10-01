@@ -2,16 +2,8 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pong wars | Koen van Gilst</title>
-    <meta
-      name="description"
-      content="The eternal battle between day and night, good and bad. Written in JavaScript with some HTML & CSS in one index.html. Feel free to reuse the code and create your own version."
-    />
-    <link rel="canonical" href="https://pong-wars.koenvangilst.nl/" />
-    <link rel="author" href="https://koenvangilst.nl" />
+    <title>Pong wars</title>
     <meta name="theme-color" content="#172B36" />
-    <meta name="creator" content="Koen van Gilst" />
-    <script defer data-domain="pong-wars.koenvangilst.nl" src="https://plausible.koenvangilst.nl/js/script.js"></script>
     <style>
       html {
         height: 100%;
@@ -52,19 +44,6 @@
         padding-left: 20px;
         color: #172b36;
       }
-
-      #made {
-        text-align: center;
-        line-height: 1.5;
-        font-family: monospace;
-        margin-top: auto;
-        margin-bottom: 20px;
-        font-size: 10px;
-      }
-
-      #made a {
-        color: #172b36;
-      }
     </style>
   </head>
 
@@ -72,18 +51,10 @@
     <div id="container">
       <canvas id="pongCanvas" width="600" height="600"></canvas>
       <div id="score"></div>
-      <p id="made">
-        made by
-        <a href="https://koenvangilst.nl/labs/pong-wars">Koen van Gilst</a> | source on
-        <a href="https://github.com/vnglst/pong-wars">github</a>
-      </p>
     </div>
   </body>
 
   <script>
-    // Source palette: https://twitter.com/AlexCristache/status/1738610343499157872
-    // Idea for Pong wars: https://twitter.com/nicolasdnl/status/1749715070928433161
-
     const colorPalette = {
       ArcticPowder: "#F1F6F4",
       MysticMint: "#D9E8E3",
@@ -107,6 +78,7 @@
 
     const numSquaresX = canvas.width / SQUARE_SIZE;
     const numSquaresY = canvas.height / SQUARE_SIZE;
+    const totalSquares = numSquaresX * numSquaresY;
 
     let dayScore = 0;
     let nightScore = 0;
@@ -125,16 +97,16 @@
       {
         x: canvas.width / 4,
         y: canvas.height / 2,
-        dx: 8,
-        dy: -8,
+        dx: 8 * 0.9,  // slowed down by 10%
+        dy: -8 * 0.9,
         reverseColor: DAY_COLOR,
         ballColor: DAY_BALL_COLOR,
       },
       {
         x: (canvas.width / 4) * 3,
         y: canvas.height / 2,
-        dx: -8,
-        dy: 8,
+        dx: -8 * 0.9,
+        dy: 8 * 0.9,
         reverseColor: NIGHT_COLOR,
         ballColor: NIGHT_BALL_COLOR,
       },
@@ -159,7 +131,6 @@
           ctx.fillStyle = squares[i][j];
           ctx.fillRect(i * SQUARE_SIZE, j * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
 
-          // Update scores
           if (squares[i][j] === DAY_COLOR) dayScore++;
           if (squares[i][j] === NIGHT_COLOR) nightScore++;
         }
@@ -167,7 +138,6 @@
     }
 
     function checkSquareCollision(ball) {
-      // Check multiple points around the ball's circumference
       for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
         const checkX = ball.x + Math.cos(angle) * (SQUARE_SIZE / 2);
         const checkY = ball.y + Math.sin(angle) * (SQUARE_SIZE / 2);
@@ -177,10 +147,7 @@
 
         if (i >= 0 && i < numSquaresX && j >= 0 && j < numSquaresY) {
           if (squares[i][j] !== ball.reverseColor) {
-            // Square hit! Update square color
             squares[i][j] = ball.reverseColor;
-
-            // Determine bounce direction based on the angle
             if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
               ball.dx = -ball.dx;
             } else {
@@ -204,11 +171,9 @@
       ball.dx += Math.random() * 0.02 - 0.01;
       ball.dy += Math.random() * 0.02 - 0.01;
 
-      // Limit the speed of the ball
       ball.dx = Math.min(Math.max(ball.dx, -MAX_SPEED), MAX_SPEED);
       ball.dy = Math.min(Math.max(ball.dy, -MAX_SPEED), MAX_SPEED);
 
-      // Make sure the ball always maintains a minimum speed
       if (Math.abs(ball.dx) < MIN_SPEED) ball.dx = ball.dx > 0 ? MIN_SPEED : -MIN_SPEED;
       if (Math.abs(ball.dy) < MIN_SPEED) ball.dy = ball.dy > 0 ? MIN_SPEED : -MIN_SPEED;
     }
@@ -217,7 +182,9 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawSquares();
 
-      scoreElement.textContent = `day ${dayScore} | night ${nightScore}`;
+      const dayPercent = ((dayScore / totalSquares) * 100).toFixed(1);
+      const nightPercent = ((nightScore / totalSquares) * 100).toFixed(1);
+      scoreElement.textContent = `day ${dayPercent}% | night ${nightPercent}%`;
 
       balls.forEach((ball) => {
         drawBall(ball);
@@ -225,12 +192,10 @@
         checkBoundaryCollision(ball);
         ball.x += ball.dx;
         ball.y += ball.dy;
-
         addRandomness(ball);
       });
 
       iteration++;
-      if (iteration % 1_000 === 0) console.log("iteration", iteration);
     }
 
     const FRAME_RATE = 100;
