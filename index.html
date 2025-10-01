@@ -134,8 +134,27 @@
       let provider = null, signer = null, userAddress = null;
 
       async function connectWallet() {
+        // --- 1) Try Phantom (Solana) if present ---
+        if (window.solana && window.solana.isPhantom) {
+          try {
+            const resp = await window.solana.connect({ onlyIfTrusted: false });
+            userAddress = resp.publicKey.toString();
+            document.getElementById("addr").textContent = short(userAddress);
+            setMsg("bet-msg","Phantom connected. (Solana address shown; EVM on-chain calls remain disabled.)");
+            // Keep address in sync if user switches inside Phantom
+            window.solana.on("accountChanged", (pk) => {
+              userAddress = pk ? pk.toString() : null;
+              document.getElementById("addr").textContent = userAddress ? short(userAddress) : "Not connected";
+            });
+            return;
+          } catch (e) {
+            // If Phantom connection is rejected, fall through to EVM flow
+          }
+        }
+
+        // --- 2) Fallback to EVM wallets (e.g., MetaMask) ---
         if (!window.ethereum) {
-          setMsg("bet-msg","No wallet found. Install MetaMask.", true);
+          setMsg("bet-msg","No EVM wallet found. Install MetaMask or use Phantom.", true);
           return;
         }
         try {
