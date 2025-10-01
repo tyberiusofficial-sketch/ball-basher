@@ -43,6 +43,25 @@
     button:hover {
       background: #666;
     }
+    #winner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: monospace;
+      font-size: 24px;
+      color: #fff;
+      background: rgba(0,0,0,0.7);
+      padding: 20px;
+      border-radius: 8px;
+      display: none;
+      text-align: center;
+    }
+    #winner button {
+      display: block;
+      margin: 10px auto 0;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
@@ -52,20 +71,22 @@
     <button onclick="toggle()">Start / Pause</button>
     <button onclick="resetGame()">Reset</button>
   </div>
+  <div id="winner"></div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Map size
-const GRID_SIZE = 100;
+// Smaller map
+const GRID_SIZE = 60;  // reduced for faster games
 const CELL = canvas.width / GRID_SIZE;
 const BALL_RADIUS = 5;
 const BITE_RADIUS = 3;
-const BALL_SPEED = 4; // consistent speed, random direction
+const BALL_SPEED = 4;
 
 let running = false;
 let frame = 0;
+let gameOver = false;
 
 // Grid: 0 = light, 1 = dark
 let grid = [];
@@ -86,14 +107,12 @@ let balls = [];
 // Reset function
 function resetGame() {
   initGrid();
-
-  // Left ball (light side)
   balls[0] = {x: 60, y: 200, ...randomDirection(BALL_SPEED), side: 0};
-  // Right ball (dark side)
   balls[1] = {x: 340, y: 200, ...randomDirection(BALL_SPEED), side: 1};
-
   running=false;
   frame=0;
+  gameOver=false;
+  document.getElementById("winner").style.display = "none";
   draw();
 }
 
@@ -108,6 +127,7 @@ function randomDirection(speed) {
 
 // Toggle running
 function toggle() {
+  if (gameOver) return; // prevent resume after win
   running = !running;
   if (running) requestAnimationFrame(loop);
 }
@@ -118,7 +138,7 @@ function loop() {
   update();
   draw();
   frame++;
-  requestAnimationFrame(loop);
+  if (!gameOver) requestAnimationFrame(loop);
 }
 
 // Update logic
@@ -136,17 +156,16 @@ function update() {
     let gy = Math.floor(b.y / CELL);
     if (gx>=0 && gx<GRID_SIZE && gy>=0 && gy<GRID_SIZE) {
       if (grid[gy][gx] !== b.side) {
-        // Carve a bite
         carve(gx, gy, b.side);
-        // Bounce back
         b.vx *= -1;
         b.vy *= -1;
-        // Push ball slightly back so it doesn’t stick
         b.x += b.vx;
         b.y += b.vy;
       }
     }
   });
+
+  checkWinner();
 }
 
 // Carve territory → replace with attacker’s color
@@ -161,6 +180,32 @@ function carve(cx, cy, side) {
       }
     }
   }
+}
+
+// Check win condition
+function checkWinner() {
+  let total=GRID_SIZE*GRID_SIZE;
+  let light=0, dark=0;
+  for (let y=0; y<GRID_SIZE; y++) {
+    for (let x=0; x<GRID_SIZE; x++) {
+      if (grid[y][x]===0) light++;
+      else if (grid[y][x]===1) dark++;
+    }
+  }
+  let lightPct = (light/total)*100;
+  let darkPct = (dark/total)*100;
+
+  if (lightPct < 5) endGame("Dark Wins!");
+  else if (darkPct < 5) endGame("Light Wins!");
+}
+
+// End game
+function endGame(message) {
+  running = false;
+  gameOver = true;
+  let winnerBox = document.getElementById("winner");
+  winnerBox.innerHTML = `<div>${message}</div><button onclick="resetGame()">Play Again</button>`;
+  winnerBox.style.display = "block";
 }
 
 // Render
